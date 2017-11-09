@@ -1,0 +1,49 @@
+#加载需要用到的包
+library(ISLR)
+library(ElemStatLearn)
+library(MASS)
+library(splines)
+#处理数据
+data(phoneme)
+data=phoneme[-c(258)]
+test=sample(0:1,nrow(phoneme),replace=TRUE,prob=c(0.1,0.9))
+data_test=data[test==0,]
+data=data[test==1,]
+X=1:256
+#先验选取的节点数
+knots_num=c(4,8,16,32,64)
+CV=rep(0,times=5)
+k=10
+#对不同节点用自然样条进行拟合并采用10-folds cross-validation预测误差
+for(i in 1:5){
+  num=knots_num[i]
+  set.seed(17)
+  knots=sort(sample(1:256,num))
+  H=ns(X,df=3,knots=knots[-c(1,num)],Boundary.knots=knots[c(1,num)],intercept=TRUE)
+  cv.error=rep(0,k)
+  folds=sample(1:k,nrow(data),replace=TRUE)
+  #cross-validation
+  for(j in 1:k){
+    data_star=cbind(data[,257],data.matrix(data[,-c(257)])%*%H)
+    X_train=data.frame(data_star[folds!=j,])
+    X_test=data.frame(data_star[folds==j,])
+    qda.fit=qda(V1~.,data=X_train)
+    qda.pre=predict(qda.fit,X_test)
+    qda.class=qda.pre$class
+    cv.error[j]=mean(qda.class!=X_test$V1)
+  }
+  CV[i]=mean(cv.error)
+}
+#从CV的结果里选取错误率最小的节点
+best=knots_num[which.min(CV)]
+knots=sort(sample(1:256,best))
+#对训练数据重新拟合
+H=ns(X,df=3,knots=knots[-c(1,best)],Boundary.knots=knots[c(1,best)],intercept=TRUE)
+data_star=data.frame(cbind(data[,257],data.matrix(data[,-c(257)])%*%H))
+data_test_star=data.frame(cbind(data_test[,257],data.matrix(data_test[,-c(257)])%*%H))
+qda.fit=qda(V1~.,data=data_star)
+#对测试数据进行检验
+qda.pre=predict(qda.fit,data_test_star)
+qda.class=qda.pre$class
+#计算测试误差
+test_error=mean(qda.class!=data_test_star$V1)
